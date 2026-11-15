@@ -174,6 +174,22 @@ def _minute_allowed(capset) -> bool:
     return error is None and not fallback
 
 
+def _minute_batch_denial(capset, minute_refresh) -> str | None:
+    """minute-batch 的 403 文案; 放行返回 None。
+
+    判据是「当前分钟数据源是否可用」而不是 TickFlow 档位: 路由到自定义分钟源
+    (腾讯/东财插件等) 时同样放行。全量分钟服务健康时也放行, 避免盘中数据
+    已在本地盘上却 403。
+    """
+    if _minute_allowed(capset):
+        return None
+    if minute_refresh is not None and minute_refresh.is_healthy():
+        return None
+    if kline_sync._selected_minute_provider_name() == "tickflow":
+        return "需要 Pro+ 权限 (kline.minute.batch)"
+    return "当前分钟数据源不可用, 请先在设置中配置可用数据源"
+
+
 @lru_cache(maxsize=8192)
 def _name_pinyin_keys(name: str) -> tuple[str, ...]:
     """返回中文名称所有可能的拼音首字母串 (多音字展开为笛卡尔积)。
@@ -867,13 +883,16 @@ def get_minute_batch(request: Request, body: dict):
     repo = request.app.state.repo
     capset = request.app.state.capabilities
 
-    # 权限守卫: 分钟K批量补拉是 Pro+ 能力; 但本地读不消耗 provider 配额 ——
-    # 全量分钟服务健康 (正持续写本地分区) 时放行, 避免"数据在盘上却 403"。
-    # is_healthy() 纯内存 O(1), 不加热路径成本。
-    if not capset.has(Cap.KLINE_MINUTE_BATCH):
-        svc = getattr(request.app.state, "minute_refresh", None)
-        if svc is None or not svc.is_healthy():
-            raise HTTPException(status_code=403, detail="需要 Pro+ 权限 (kline.minute.batch)")
+    # 权限守卫: 以「当前分钟数据源是否可用」为准, 而不是只看 TickFlow 档位 ——
+    # 路由到自定义分钟源 (如腾讯/东财插件) 时同样应放行, 否则会出现
+    # 「设置页显示已适配、分时回补却 403」的口径矛盾。
+    # 本地读不消耗 provider 配额: 全量分钟服务健康时同样放行, 避免数据在盘上却 403。
+    # is_healthy() / _minute_allowed() 都是内存判断, 不加热路径成本。
+    denial = _minute_batch_denial(
+        capset, getattr(request.app.state, "minute_refresh", None),
+    )
+    if denial is not None:
+        raise HTTPException(status_code=403, detail=denial)
 
     trade_date = date.fromisoformat(trade_date_str) if trade_date_str else cn_today()
 
