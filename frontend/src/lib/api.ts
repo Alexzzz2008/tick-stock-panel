@@ -2273,6 +2273,19 @@ export interface CapabilityMatrix {
   capabilities: CapabilityRoute[]
 }
 
+export interface DepthLevels {
+  symbol: string
+  /** 实际取数的数据源 (跟随设置或显式指定) */
+  provider: string
+  /** 买一→买五, 数量单位手 */
+  bid_prices: number[]
+  bid_volumes: number[]
+  /** 卖一→卖五, 数量单位手 */
+  ask_prices: number[]
+  ask_volumes: number[]
+  timestamp: number | null
+}
+
 export interface DataSourceLoadError {
   name?: string
   path: string
@@ -2954,6 +2967,11 @@ export const api = {
     }),
   dataSources: () => request<DataSourcesResponse>('/api/settings/data-sources'),
   capabilityMatrix: () => request<CapabilityMatrix>('/api/settings/capability-matrix'),
+  depthLevels: (symbol: string, provider?: string) =>
+    request<DepthLevels>(
+      `/api/depth/levels?symbol=${encodeURIComponent(symbol)}`
+      + (provider ? `&provider=${encodeURIComponent(provider)}` : ''),
+    ),
   dataSource: (name: string) => request<CustomSourceConfig>(`/api/settings/data-sources/${encodeURIComponent(name)}`),
   saveDataSource: (config: CustomSourceConfig) =>
     request<DataSourcesResponse>('/api/settings/data-sources', {
