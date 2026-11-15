@@ -122,6 +122,23 @@ def _status_of(closeness: float) -> str:
     return _STATUS_WATCH
 
 
+def _name_map(repo: Any, symbols: list[str]) -> dict[str, str]:
+    """维表名称补全。
+
+    enriched 快照只存 15 列基础行情、没有 name 列, 异动接口若直接用快照的
+    name 字段, 结果就是 null 或干脆没有该字段 (前端只剩代码)。名称以
+    instruments 维表为准, 与 /api/kline/instruments/names 同一入口。
+    补名属于展示增强, 取名失败时保持原值, 不阻断异动列表。
+    """
+    getter = getattr(repo, "get_name_map", None)
+    if not callable(getter) or not symbols:
+        return {}
+    try:
+        return getter(symbols) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def _hist_snapshot(repo: Any) -> dict[str, Any]:
     """enriched 最新日的偏离列快照 (60s 进程内缓存)。"""
     now = time.monotonic()
@@ -209,6 +226,7 @@ def build_overview(
     if not includes_today and (today.weekday() >= 5 or _is_closed_session()):
         includes_today = True
 
+    name_map = _name_map(repo, list(hist_rows))
     out_rows: list[dict[str, Any]] = []
     for symbol, base in hist_rows.items():
         rule = rule_for(symbol, base.get("name"))
@@ -237,7 +255,7 @@ def build_overview(
             continue
         out_rows.append({
             "symbol": symbol,
-            "name": base.get("name"),
+            "name": base.get("name") or name_map.get(symbol),
             "board": rule.board,
             "st": rule.st,
             "close": base.get("close"),
@@ -315,7 +333,10 @@ def build_intraday(repo: Any, limit: int = 500) -> dict[str, Any]:
             "_prio": min((_INTRADAY_PRIORITY[s] for s in signals), default=99),
         })
     rows.sort(key=lambda r: (r["_prio"], -abs(r.get("change_pct") or 0.0)))
+    name_map = _name_map(repo, [r["symbol"] for r in rows])
     for r in rows:
         r.pop("_prio", None)
+        if not r.get("name"):
+            r["name"] = name_map.get(r["symbol"])
     return {"cache_date": cache_date.isoformat() if cache_date else None,
             "counts": counts, "rows": rows[:limit]}

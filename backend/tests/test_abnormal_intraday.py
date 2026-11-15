@@ -73,3 +73,47 @@ def test_missing_signal_columns_degrades():
     repo = _FakeRepo(pl.DataFrame({"symbol": ["A1"], "name": ["甲"]}))
     out = build_intraday(repo)
     assert out["rows"] == [] and out["counts"] == {}
+
+
+class _FakeRepoNoName(_FakeRepo):
+    """enriched 快照没有 name 列 (真实仓库 15 列基础数据的形态), 名称只能取维表。"""
+
+    def __init__(self, df: pl.DataFrame, names: dict[str, str]):
+        super().__init__(df)
+        self._names = names
+
+    def get_name_map(self, symbols=None):
+        wanted = set(symbols or ())
+        return {s: n for s, n in self._names.items() if not wanted or s in wanted}
+
+
+def test_names_filled_from_instruments_when_enriched_has_no_name():
+    df = pl.DataFrame({
+        "symbol": ["600519.SH", "000001.SZ"],
+        "close": [1400.0, 12.0],
+        "change_pct": [0.01, -0.02],
+        "vol_ratio_5d": [2.1, 3.0],
+        "signal_limit_up": [True, False],
+        "signal_volume_surge": [False, True],
+    })
+    repo = _FakeRepoNoName(df, {"600519.SH": "贵州茅台", "000001.SZ": "平安银行"})
+    out = build_intraday(repo)
+    names = {r["symbol"]: r["name"] for r in out["rows"]}
+    assert names == {"600519.SH": "贵州茅台", "000001.SZ": "平安银行"}
+
+
+def test_name_lookup_failure_does_not_break_rows():
+    df = pl.DataFrame({
+        "symbol": ["600519.SH"],
+        "close": [1400.0],
+        "change_pct": [0.01],
+        "signal_limit_up": [True],
+    })
+
+    class _Broken(_FakeRepo):
+        def get_name_map(self, symbols=None):
+            raise RuntimeError("instruments 维表不可读")
+
+    out = build_intraday(_Broken(df))
+    assert out["rows"][0]["symbol"] == "600519.SH"
+    assert out["rows"][0]["name"] is None
