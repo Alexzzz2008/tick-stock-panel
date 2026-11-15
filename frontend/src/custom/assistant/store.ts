@@ -73,7 +73,9 @@ const MAX_INPUT_CHARS = 4000
 const FAB_STORAGE_KEY = 'assistant.fab.enabled'
 
 function loadFabVisible(): boolean {
-  try { return localStorage.getItem(FAB_STORAGE_KEY) !== '0' } catch { return true }
+  // 默认隐藏: 悬浮球会遮挡看板卡片角落且多数场景用不到; 需要时在
+  // 设置 → AI 设置 → 显示悬浮球 打开, 选择会持久化。
+  try { return localStorage.getItem(FAB_STORAGE_KEY) === '1' } catch { return false }
 }
 
 let state: AssistantState = {
@@ -477,7 +479,7 @@ export function closeAssistant() {
   setState({ open: false }, false)
 }
 
-/** 设置悬浮球可见性并持久化 (localStorage 缓存 + 后端 ui_prefs 权威副本, 默认开启)。 */
+/** 设置悬浮球可见性并持久化 (localStorage 缓存 + 后端 ui_prefs 权威副本, 默认隐藏)。 */
 export function setFabVisible(visible: boolean) {
   setUiPref(FAB_STORAGE_KEY, visible ? '1' : '0')
   setState({ fabVisible: visible }, false)

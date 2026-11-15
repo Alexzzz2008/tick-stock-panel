@@ -11,9 +11,9 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useVersion } from '@/lib/useSharedQueries'
 
-// 检查更新的目标仓库 (Release 清单来源) — 仓库已由 tickflow-stock-panel 改名,
-// 用当前名可少依赖一次 GitHub 的改名重定向
-const UPDATE_REPO = 'shy3130/tick-stock-panel'
+// 检查更新的目标仓库 (Release 清单来源) — 本仓库为二次开发 fork,
+// 更新只能跟随自己的 Release, 否则会把上游版本装上去、覆盖本地改动。
+const UPDATE_REPO = 'Alexzzz2008/tick-stock-panel'
 const CACHE_KEY = 'update_check_cache'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
